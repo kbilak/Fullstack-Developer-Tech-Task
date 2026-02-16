@@ -1,0 +1,42 @@
+{
+  "name": "inhabit-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "run-p type-check \"build-only {@}\" --",
+    "preview": "vite preview",
+    "build-only": "vite build",
+    "type-check": "vue-tsc --build",
+    "lint": "eslint . --fix --cache",
+    "format": "prettier --write src/"
+  },
+  "dependencies": {
+    "@vuepic/vue-datepicker": "^12.1.0",
+    "axios": "^1.13.5",
+    "chart.js": "^4.5.1",
+    "date-fns": "^4.1.0",
+    "lucide-vue-next": "^0.564.0",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.27",
+    "vue-chartjs": "^5.3.3",
+    "vue-router": "^5.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/node": "^24.10.9",
+    "@vitejs/plugin-vue": "^6.0.3",
+    "@vue/eslint-config-typescript": "^14.6.0",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "~10.7.0",
+    "npm-run-all2": "^8.0.4",
+    "prettier": "^3.8.1",
+    "prettier-plugin-tailwindcss": "^0.7.2",
+    "tailwindcss": "^4.1.18",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1",
+    "vue-tsc": "^3.2.4"
+  }
+}
