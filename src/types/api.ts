@@ -1,5 +1,8 @@
-export interface ApiResponse<T> {
+export interface ApiResult {
   status: boolean
   message: string | null
-  data?: T
+}
+
+export interface CreateResult extends ApiResult {
+  id: number
 }
