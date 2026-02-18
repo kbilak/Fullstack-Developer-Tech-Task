@@ -1,4 +1,5 @@
-import type { StoreListPaginated, StoreDetail, StoreStatistics } from '@/types/store'
+import type { StoreListPaginated, StoreDetail } from '@/types/store'
+import type { StoreStatistics } from '@/types/statistics'
 import type { ApiResult, CreateResult } from '@/types/api'
 import { testStores, testStatistics } from './testData'
 
@@ -64,15 +65,21 @@ export async function updateStore(id: number, payload: { name: string; city: str
   return { id, status: true, message: null }
 }
 
-/** Deletes a single test store by ID. */
+/** Deletes a single test store by ID. Returns error if store does not exist. */
 export async function deleteStore(id: number): Promise<ApiResult> {
   const idx = testStores.findIndex((s) => s.id === id)
-  if (idx !== -1) testStores.splice(idx, 1)
+  if (idx === -1) return { status: false, message: `Store with ID ${id} not found` }
+  testStores.splice(idx, 1)
   return { status: true, message: null }
 }
 
-/** Deletes multiple test stores by IDs. */
+/** Deletes multiple test stores by IDs. Returns error if any store does not exist. */
 export async function deleteStores(ids: number[]): Promise<ApiResult> {
+  const existingIds = new Set(testStores.map((s) => s.id))
+  const missing = ids.filter((id) => !existingIds.has(id))
+  if (missing.length > 0) {
+    return { status: false, message: `Stores not found: ${missing.join(', ')}` }
+  }
   const idSet = new Set(ids)
   for (let i = testStores.length - 1; i >= 0; i--) {
     if (idSet.has(testStores[i]!.id)) testStores.splice(i, 1)

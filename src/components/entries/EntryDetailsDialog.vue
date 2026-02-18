@@ -3,6 +3,8 @@
 import { ref, watch } from 'vue'
 import type { EntryListItem } from '@/types/entry'
 import { useUserStore } from '@/stores/useUserStore'
+import { dialogPt } from '@/utils/dialog'
+import { formatDateTime } from '@/utils/date'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 // #endregion IMPORTS
@@ -28,6 +30,11 @@ const loadingStore = ref(false)
 // #endregion STATE
 
 // #region WATCHERS
+/**
+ * Fetches the store's city and country when the dialog opens.
+ * The entry only carries `storeName`, so we need a separate API call
+ * to resolve the full store details for display.
+ */
 watch(visible, async (open) => {
   if (open && props.entry) {
     storeCity.value = ''
@@ -46,26 +53,6 @@ watch(visible, async (open) => {
   }
 })
 // #endregion WATCHERS
-
-// #region HELPERS
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-}
-// #endregion HELPERS
-
-const dialogPt = {
-  root: { class: 'rounded-2xl!' },
-  header: { class: 'border-b border-gray-100 px-6! py-4!' },
-  content: { class: 'px-6! py-5!' },
-  footer: { class: 'border-t border-gray-100 px-6! py-4!' },
-}
 </script>
 
 <template>
@@ -77,26 +64,26 @@ const dialogPt = {
     <div v-if="entry" class="flex flex-col gap-4">
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
-          <span class="text-xs font-medium uppercase tracking-wide text-gray-400">ID</span>
+          <span class="text-xs font-medium tracking-wide text-gray-400 uppercase">ID</span>
           <span class="text-sm text-gray-500">#{{ entry.id }}</span>
         </div>
         <div class="flex flex-col gap-1">
-          <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Date</span>
-          <span class="text-sm text-gray-900">{{ formatDate(entry.entryDate) }}</span>
+          <span class="text-xs font-medium tracking-wide text-gray-400 uppercase">Date</span>
+          <span class="text-sm text-gray-900">{{ formatDateTime(entry.entryDate) }}</span>
         </div>
       </div>
       <div class="flex flex-col gap-1">
-        <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Store</span>
+        <span class="text-xs font-medium tracking-wide text-gray-400 uppercase">Store</span>
         <span class="text-sm text-gray-900">{{ entry.storeName }}</span>
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1">
-          <span class="text-xs font-medium uppercase tracking-wide text-gray-400">City</span>
+          <span class="text-xs font-medium tracking-wide text-gray-400 uppercase">City</span>
           <i v-if="loadingStore" class="pi pi-spin pi-spinner text-sm text-gray-400"></i>
           <span v-else class="text-sm text-gray-900">{{ storeCity }}</span>
         </div>
         <div class="flex flex-col gap-1">
-          <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Country</span>
+          <span class="text-xs font-medium tracking-wide text-gray-400 uppercase">Country</span>
           <i v-if="loadingStore" class="pi pi-spin pi-spinner text-sm text-gray-400"></i>
           <span v-else class="text-sm text-gray-900">{{ storeCountry }}</span>
         </div>

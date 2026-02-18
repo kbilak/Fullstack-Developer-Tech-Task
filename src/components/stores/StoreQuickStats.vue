@@ -1,27 +1,22 @@
 <script setup lang="ts">
 // #region IMPORTS
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/useUserStore'
+import { useStoresStore } from '@/stores/useStoresStore'
 import type { EntryDailyCount } from '@/types/entry'
-import type { DailyStatistic } from '@/types/store'
+import type { DailyStatistic } from '@/types/statistics'
 import { Line } from 'vue-chartjs'
 import StoreQuickStatDetailDialog from './StoreQuickStatDetailDialog.vue'
 import type { StoreQuickStatMetric } from './StoreQuickStatDetailDialog.vue'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-} from 'chart.js'
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler)
+import { today, daysAgo } from '@/utils/date'
+import { fmtNum, changeText } from '@/utils/format'
+import { makeDualSparkline } from '@/utils/chart'
 // #endregion IMPORTS
 
 // #region STATE
 const userStore = useUserStore()
 const { storeApi, entryApi } = userStore
+const storesStore = useStoresStore()
 const loading = ref(false)
 
 const totalStoreCount = ref(0)
@@ -33,28 +28,13 @@ const showDetail = ref(false)
 const detailMetric = ref<StoreQuickStatMetric>('stores')
 // #endregion STATE
 
-// #region HELPERS
-function toLocalDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function today(): string {
-  return toLocalDate(new Date())
-}
-
-function daysAgo(n: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return toLocalDate(d)
-}
-
-function fmtNum(n: number): string {
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-}
-// #endregion HELPERS
-
 // #region COMPUTED
-/** All-store daily entries: 14-day padded array. Index 0 = 13 days ago, index 13 = today. */
+/**
+ * 14-day padded array of all-store daily entry counts.
+ * Index 0 = 13 days ago, index 13 = today. Missing days are zero-filled.
+ * The first 7 elements form the "previous week" and the last 7 the "current week",
+ * enabling week-over-week comparison across all three quick-stat cards.
+ */
 const fullData = computed(() => {
   const map = new Map(allDailyCounts.value.map((d) => [d.date.slice(0, 10), d.count]))
   const result: number[] = []
@@ -132,33 +112,6 @@ const sparklineOptions = {
   },
 }
 
-function makeDualSparkline(current: number[], previous: number[], color: string) {
-  return {
-    labels: current.map((_, i) => String(i)),
-    datasets: [
-      {
-        data: current,
-        borderColor: color,
-        backgroundColor: color + '18',
-        borderWidth: 1.5,
-        pointRadius: 0,
-        tension: 0.4,
-        fill: true,
-      },
-      {
-        data: previous,
-        borderColor: '#9ca3af',
-        backgroundColor: 'transparent',
-        borderWidth: 1,
-        borderDash: [3, 3],
-        pointRadius: 0,
-        tension: 0.4,
-        fill: false,
-      },
-    ],
-  }
-}
-
 const storesSparkline = computed(() => {
   const color = totalChange.value >= 0 ? '#10b981' : '#ef4444'
   return makeDualSparkline(currentWeek.value, previousWeek.value, color)
@@ -174,12 +127,16 @@ const topSparkline = computed(() => {
   return makeDualSparkline(topCurrentWeek.value, topPreviousWeek.value, color)
 })
 
-function changeText(val: number): string {
-  return (val > 0 ? '+' : '') + val + '%'
-}
 // #endregion COMPUTED
 
 // #region METHODS
+/**
+ * Bootstraps all quick-stat data in a single pass:
+ * 1. Fetches the full store list and 14-day global entry statistics in parallel.
+ * 2. Identifies the top store by highest entryCount and fetches its daily stats.
+ * 3. Persists everything to the storesStore cache so reopening the dashboard
+ *    does not trigger redundant network requests.
+ */
 async function loadStats() {
   loading.value = true
   try {
@@ -201,8 +158,16 @@ async function loadStats() {
       const topResult = await storeApi().fetchStatistics(top.id, daysAgo(13), today())
       topStoreDailyCounts.value = topResult.statistics
     }
+
+    // Persist to store cache
+    storesStore.quickStatsCache = {
+      totalStoreCount: totalStoreCount.value,
+      allDailyCounts: allDailyCounts.value,
+      topStore: topStore.value,
+      topStoreDailyCounts: topStoreDailyCounts.value,
+    }
   } catch {
-    /* silent — tiles just show 0 */
+    // noop — tiles fall back to 0
   } finally {
     loading.value = false
   }
@@ -215,19 +180,24 @@ function openDetail(metric: StoreQuickStatMetric) {
 // #endregion METHODS
 
 // #region LIFECYCLE
-onMounted(() => loadStats())
-
-watch(
-  () => userStore.storesDataSource,
-  () => loadStats(),
-)
+onMounted(() => {
+  const cached = storesStore.quickStatsCache
+  if (cached) {
+    totalStoreCount.value = cached.totalStoreCount
+    allDailyCounts.value = cached.allDailyCounts
+    topStore.value = cached.topStore
+    topStoreDailyCounts.value = cached.topStoreDailyCounts
+  } else {
+    loadStats()
+  }
+})
 
 defineExpose({ refresh: loadStats })
 // #endregion LIFECYCLE
 </script>
 
 <template>
-  <div class="grid grid-cols-3 gap-4">
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
     <!-- Total Stores -->
     <div
       class="cursor-pointer overflow-hidden rounded-xl border border-gray-200 bg-white px-5 py-4 transition-shadow hover:shadow-md"

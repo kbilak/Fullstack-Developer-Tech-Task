@@ -24,7 +24,7 @@ export async function fetchEntries(
 export async function fetchEntriesByStore(
   storeId: number,
   page = 1,
-  pageSize = 1,
+  pageSize = 10,
 ): Promise<StoreEntryListPaginated> {
   const { data } = await apiClient.get<StoreEntryListPaginated>(
     `/Entry/store/${storeId}`,

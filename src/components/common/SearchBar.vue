@@ -1,4 +1,9 @@
 <script setup lang="ts">
+/**
+ * Reusable search input with icon, clear button, and v-model support.
+ */
+
+// #region PROPS & EMITS
 defineProps<{
   modelValue: string
   placeholder?: string
@@ -7,6 +12,7 @@ defineProps<{
 defineEmits<{
   'update:modelValue': [value: string]
 }>()
+// #endregion PROPS & EMITS
 </script>
 
 <template>

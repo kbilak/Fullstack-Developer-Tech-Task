@@ -2,23 +2,16 @@
 // #region IMPORTS
 import { ref, watch, computed } from 'vue'
 import { useUserStore } from '@/stores/useUserStore'
-import type { DailyStatistic } from '@/types/store'
+import type { DailyStatistic } from '@/types/statistics'
+import { toISODate, fillDailyGaps } from '@/utils/date'
+import { useStatisticsStore } from '@/stores/useStatisticsStore'
+import { entryColor } from '@/utils/chart'
+import { dialogPtNoFooter } from '@/utils/dialog'
+import ColorLegend from '@/components/common/ColorLegend.vue'
 import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
 import Button from 'primevue/button'
 import { Line, Bar } from 'vue-chartjs'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-} from 'chart.js'
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip)
 // #endregion IMPORTS
 
 // #region PROPS & EMITS
@@ -32,20 +25,20 @@ const props = defineProps<{
 
 // #region STATE
 const { storeApi } = useUserStore()
+const statsStore = useStatisticsStore()
 const statistics = ref<DailyStatistic[]>([])
 const storeInfo = ref<{ city: string; country: string } | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-// Default range: last 30 days
-function defaultRange(): [Date, Date] {
-  const end = new Date()
-  const start = new Date()
-  start.setDate(start.getDate() - 30)
-  return [start, end]
-}
-
-const dateRange = ref<[Date, Date]>(defaultRange())
+const startDate = computed({
+  get: () => new Date(statsStore.startDate + 'T00:00:00'),
+  set: (val: Date) => { statsStore.startDate = toISODate(val) },
+})
+const endDate = computed({
+  get: () => new Date(statsStore.endDate + 'T00:00:00'),
+  set: (val: Date) => { statsStore.endDate = toISODate(val) },
+})
 const loadedRange = ref<[string, string] | null>(null)
 const chartType = ref<'line' | 'bar'>('line')
 // #endregion STATE
@@ -54,29 +47,14 @@ const chartType = ref<'line' | 'bar'>('line')
 /** Fills gaps so every day in the range has a data point (0 if missing). */
 const filledStatistics = computed(() => {
   if (statistics.value.length === 0 || !loadedRange.value) return []
-  const map = new Map(statistics.value.map((s) => [s.date, s.count]))
-  const result: DailyStatistic[] = []
-  const current = new Date(loadedRange.value[0])
-  const end = new Date(loadedRange.value[1])
-  while (current <= end) {
-    const key = current.toISOString().split('T')[0]!
-    result.push({ date: key, count: map.get(key) ?? 0 })
-    current.setDate(current.getDate() + 1)
-  }
-  return result
+  return fillDailyGaps(statistics.value, loadedRange.value[0], loadedRange.value[1])
 })
 
-/** Returns a hex color based on value's position in min–max range (red→amber→blue→emerald). */
-function entryColor(count: number, min: number, max: number): string {
-  if (count === 0) return '#9ca3af' // gray-400
-  if (min === max) return '#059669' // emerald-600
-  const ratio = (count - min) / (max - min)
-  if (ratio <= 0.25) return '#dc2626' // red-600
-  if (ratio <= 0.5) return '#d97706' // amber-600
-  if (ratio <= 0.75) return '#2563eb' // blue-600
-  return '#059669' // emerald-600
-}
-
+/**
+ * Builds chart data with per-point colors derived from each day's entry count
+ * relative to the min/max range. Low-count days appear cool-toned while
+ * high-count days appear warm-toned, giving an at-a-glance heat indication.
+ */
 const chartData = computed(() => {
   const data = filledStatistics.value
   const counts = data.map((s) => s.count).filter((c) => c > 0)
@@ -121,31 +99,23 @@ const totalEntries = computed(() => statistics.value.reduce((sum, s) => sum + s.
 
 const dateRangeChanged = computed(() => {
   if (!loadedRange.value) return true
-  return formatDate(dateRange.value[0]) !== loadedRange.value[0] || formatDate(dateRange.value[1]) !== loadedRange.value[1]
+  return statsStore.startDate !== loadedRange.value[0] || statsStore.endDate !== loadedRange.value[1]
 })
 // #endregion COMPUTED
 
 // #region METHODS
-function formatDate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
+/** Fetches daily entry statistics for a single store within the selected date range. */
 async function loadStatistics() {
-  if (!props.storeId || !dateRange.value[0] || !dateRange.value[1]) return
+  if (!props.storeId) return
   loading.value = true
   error.value = null
   try {
-    const result = await storeApi().fetchStatistics(
-      props.storeId,
-      formatDate(dateRange.value[0]),
-      formatDate(dateRange.value[1]),
-    )
+    const start = statsStore.startDate
+    const end = statsStore.endDate
+    const result = await storeApi().fetchStatistics(props.storeId, start, end)
     statistics.value = result.statistics
     storeInfo.value = { city: result.city, country: result.country }
-    loadedRange.value = [formatDate(dateRange.value[0]), formatDate(dateRange.value[1])]
+    loadedRange.value = [start, end]
   } catch {
     error.value = 'Failed to load statistics'
     statistics.value = []
@@ -159,7 +129,6 @@ async function loadStatistics() {
 // Load statistics when dialog opens or date range changes
 watch(visible, (open) => {
   if (open) {
-    dateRange.value = defaultRange()
     loadStatistics()
   } else {
     statistics.value = []
@@ -170,18 +139,13 @@ watch(visible, (open) => {
 
 // #endregion WATCHERS
 
-const dialogPt = {
-  root: { class: 'rounded-2xl!' },
-  header: { class: 'border-b border-gray-100 px-6! py-4!' },
-  content: { class: 'px-6! py-5!' },
-}
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" modal :style="{ width: '720px' }" :pt="dialogPt">
+  <Dialog v-model:visible="visible" modal :style="{ width: '720px' }" :pt="dialogPtNoFooter">
     <template #header>
       <div class="flex flex-col gap-1">
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <span class="text-base font-semibold text-gray-900">Entries — {{ storeName }}</span>
           <span v-if="!loading && statistics.length > 0" class="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-600">
             {{ totalEntries }} entries in range
@@ -195,43 +159,45 @@ const dialogPt = {
 
     <div class="flex flex-col gap-4">
       <!-- Date range picker -->
-      <div class="flex items-end gap-3">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div class="flex flex-col gap-1.5">
           <label class="text-[13px] font-medium text-gray-700">From</label>
           <DatePicker
-            v-model="dateRange[0]"
+            v-model="startDate"
             date-format="dd/mm/yy"
-            :max-date="dateRange[1]"
-            class="w-44"
+            :max-date="endDate"
+            class="w-full sm:w-44"
             size="small"
           />
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="text-[13px] font-medium text-gray-700">To</label>
           <DatePicker
-            v-model="dateRange[1]"
+            v-model="endDate"
             date-format="dd/mm/yy"
-            :min-date="dateRange[0]"
+            :min-date="startDate"
             :max-date="new Date()"
-            class="w-44"
+            class="w-full sm:w-44"
             size="small"
           />
         </div>
-        <Button
-          label="Load"
-          icon="pi pi-search"
-          size="small"
-          :loading="loading"
-          :disabled="!dateRangeChanged"
-          @click="loadStatistics"
-        />
-        <Button
-          :icon="chartType === 'line' ? 'pi pi-chart-bar' : 'pi pi-chart-line'"
-          :label="chartType === 'line' ? 'Bar' : 'Line'"
-          size="small"
-          text
-          @click="chartType = chartType === 'line' ? 'bar' : 'line'"
-        />
+        <div class="flex gap-2">
+          <Button
+            label="Load"
+            icon="pi pi-search"
+            size="small"
+            :loading="loading"
+            :disabled="!dateRangeChanged"
+            @click="loadStatistics"
+          />
+          <Button
+            :icon="chartType === 'line' ? 'pi pi-chart-bar' : 'pi pi-chart-line'"
+            :label="chartType === 'line' ? 'Bar' : 'Line'"
+            size="small"
+            text
+            @click="chartType = chartType === 'line' ? 'bar' : 'line'"
+          />
+        </div>
       </div>
 
       <!-- Loading (initial) -->
@@ -258,28 +224,7 @@ const dialogPt = {
             <i class="pi pi-spin pi-spinner text-lg text-gray-400"></i>
           </div>
         </div>
-        <div class="mt-2 flex items-center justify-center gap-4 text-[11px] text-gray-500">
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: #dc2626"></span>
-            Low (0–25%)
-          </span>
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: #d97706"></span>
-            Medium (25–50%)
-          </span>
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: #2563eb"></span>
-            High (50–75%)
-          </span>
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: #059669"></span>
-            Top (75–100%)
-          </span>
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: #9ca3af"></span>
-            No data
-          </span>
-        </div>
+        <ColorLegend class="mt-2" />
       </div>
     </div>
   </Dialog>

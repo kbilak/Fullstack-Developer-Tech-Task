@@ -1,13 +1,21 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useUserStore } from './useUserStore'
-import type { EntryListItem } from '@/types/entry'
+import type { EntryListItem, EntryDailyCount, EntryStoreCount } from '@/types/entry'
 import type { EntriesSortField } from './useUserStore'
 
-/**
- * @method useEntriesStore
- * @summary Store managing entries list with server-side sort, search, and page caching
- */
+export interface EntryQuickStatsCache {
+  dailyCounts: EntryDailyCount[]
+}
+
+export interface EntryStatisticsCache {
+  dailyCounts: EntryDailyCount[]
+  storeCounts: EntryStoreCount[]
+  loadedRange: [string, string] | null
+  viewMode: 'daily' | 'store'
+}
+
+/** Store managing entries list with server-side sort, search, and page caching. */
 export const useEntriesStore = defineStore('entries', () => {
   const userStore = useUserStore()
 
@@ -16,8 +24,18 @@ export const useEntriesStore = defineStore('entries', () => {
   const totalRecords = ref(0)
   const page = ref(1)
   const pageSize = ref(10)
-  const sortField = computed<EntriesSortField>({ get: () => userStore.entriesSortField, set: (v) => { userStore.entriesSortField = v } })
-  const sortOrder = computed({ get: () => userStore.entriesSortOrder, set: (v) => { userStore.entriesSortOrder = v } })
+  const sortField = computed<EntriesSortField>({
+    get: () => userStore.entriesSortField,
+    set: (v) => {
+      userStore.entriesSortField = v
+    },
+  })
+  const sortOrder = computed({
+    get: () => userStore.entriesSortOrder,
+    set: (v) => {
+      userStore.entriesSortOrder = v
+    },
+  })
   const search = ref('')
   const storeId = ref<number | null>(null)
   const dateFrom = ref<string | null>(null)
@@ -26,6 +44,10 @@ export const useEntriesStore = defineStore('entries', () => {
   const error = ref<string | null>(null)
 
   const pageCache = new Map<string, { items: EntryListItem[]; totalItems: number }>()
+
+  const quickStatsCache = ref<EntryQuickStatsCache | null>(null)
+  const statisticsCache = ref<EntryStatisticsCache | null>(null)
+  const storeOptionsCache = ref<{ label: string; value: number | null }[] | null>(null)
   // #endregion STATE
 
   // #region HELPERS
@@ -54,10 +76,17 @@ export const useEntriesStore = defineStore('entries', () => {
     error.value = null
     try {
       const searchTrimmed = search.value.trim() || undefined
-      const result = await userStore.entryApi().fetchEntries(
-        page.value, pageSize.value, sortParam(), searchTrimmed,
-        storeId.value ?? undefined, dateFrom.value ?? undefined, dateTo.value ?? undefined,
-      )
+      const result = await userStore
+        .entryApi()
+        .fetchEntries(
+          page.value,
+          pageSize.value,
+          sortParam(),
+          searchTrimmed,
+          storeId.value ?? undefined,
+          dateFrom.value ?? undefined,
+          dateTo.value ?? undefined,
+        )
       entries.value = result.items
       totalRecords.value = result.totalItems
       pageCache.set(key, { items: result.items, totalItems: result.totalItems })
@@ -71,8 +100,10 @@ export const useEntriesStore = defineStore('entries', () => {
   /** Optimistically removes entries from the list and adjusts totalRecords. */
   function removeEntriesLocally(ids: number[]) {
     const idSet = new Set(ids)
+    const before = entries.value.length
     entries.value = entries.value.filter((e) => !idSet.has(e.id))
-    totalRecords.value = Math.max(0, totalRecords.value - ids.length)
+    const removed = before - entries.value.length
+    totalRecords.value = Math.max(0, totalRecords.value - removed)
     pageCache.clear()
   }
 
@@ -83,13 +114,11 @@ export const useEntriesStore = defineStore('entries', () => {
     pageCache.clear()
   }
 
-  /** Clears all caches and force-reloads entries from the API. */
-  function invalidateAndReload() {
+  async function invalidateAndReload() {
     pageCache.clear()
-    loadEntries(true)
+    await loadEntries(true)
   }
 
-  /** Resets all state and caches to initial values. */
   function $reset() {
     entries.value = []
     totalRecords.value = 0
@@ -102,12 +131,32 @@ export const useEntriesStore = defineStore('entries', () => {
     loading.value = false
     error.value = null
     pageCache.clear()
+    quickStatsCache.value = null
+    statisticsCache.value = null
+    storeOptionsCache.value = null
   }
   // #endregion METHODS
 
   return {
-    entries, totalRecords, page, pageSize, sortField, sortOrder, search,
-    storeId, dateFrom, dateTo, loading, error,
-    loadEntries, removeEntriesLocally, updateEntryLocally, invalidateAndReload, $reset,
+    entries,
+    totalRecords,
+    page,
+    pageSize,
+    sortField,
+    sortOrder,
+    search,
+    storeId,
+    dateFrom,
+    dateTo,
+    loading,
+    error,
+    quickStatsCache,
+    statisticsCache,
+    storeOptionsCache,
+    loadEntries,
+    removeEntriesLocally,
+    updateEntryLocally,
+    invalidateAndReload,
+    $reset,
   }
 })

@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import ProgressSpinner from 'primevue/progressspinner'
+/**
+ * Full-width centered loading spinner with optional message text.
+ */
 
+// #region IMPORTS
+import ProgressSpinner from 'primevue/progressspinner'
+// #endregion IMPORTS
+
+// #region PROPS
 defineProps<{
   message?: string
 }>()
+// #endregion PROPS
 </script>
 
 <template>

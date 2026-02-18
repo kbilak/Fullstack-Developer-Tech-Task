@@ -3,6 +3,7 @@
 import { ref, computed, watch } from 'vue'
 import type { StoreDetail, StorePayload } from '@/types/store'
 import { useUserStore } from '@/stores/useUserStore'
+import { dialogPt } from '@/utils/dialog'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
@@ -61,11 +62,30 @@ watch(visible, (open) => {
 // #endregion WATCHERS
 
 // #region METHODS
+const NAME_PATTERN = /^[\p{L}\p{N}\s\-'.&]+$/u
+const MIN_LENGTH = 2
+const MAX_LENGTH = 100
+
 function validate(): boolean {
   errors.value = {}
-  if (!formData.value.name.trim()) errors.value.name = 'Name is required'
-  if (!formData.value.city.trim()) errors.value.city = 'City is required'
-  if (!formData.value.country.trim()) errors.value.country = 'Country is required'
+
+  for (const [field, label] of [
+    ['name', 'Name'],
+    ['city', 'City'],
+    ['country', 'Country'],
+  ] as const) {
+    const val = formData.value[field].trim()
+    if (!val) {
+      errors.value[field] = `${label} is required`
+    } else if (val.length < MIN_LENGTH) {
+      errors.value[field] = `${label} must be at least ${MIN_LENGTH} characters`
+    } else if (val.length > MAX_LENGTH) {
+      errors.value[field] = `${label} must be at most ${MAX_LENGTH} characters`
+    } else if (!NAME_PATTERN.test(val)) {
+      errors.value[field] = `${label} contains invalid characters`
+    }
+  }
+
   return !Object.keys(errors.value).length
 }
 
@@ -89,13 +109,6 @@ async function submit() {
   }
 }
 // #endregion METHODS
-
-const dialogPt = {
-  root: { class: 'rounded-2xl!' },
-  header: { class: 'border-b border-gray-100 px-6! py-4!' },
-  content: { class: 'px-6! py-5!' },
-  footer: { class: 'border-t border-gray-100 px-6! py-4!' },
-}
 </script>
 
 <template>
@@ -118,6 +131,7 @@ const dialogPt = {
           :invalid="!!errors.name"
           placeholder="Store name"
           size="small"
+          :maxlength="MAX_LENGTH"
         />
         <span v-if="errors.name" class="text-xs text-red-500">{{ errors.name }}</span>
       </div>
@@ -132,6 +146,7 @@ const dialogPt = {
             :invalid="!!errors.city"
             placeholder="City"
             size="small"
+            :maxlength="MAX_LENGTH"
           />
           <span v-if="errors.city" class="text-xs text-red-500">{{ errors.city }}</span>
         </div>
@@ -144,6 +159,7 @@ const dialogPt = {
             :invalid="!!errors.country"
             placeholder="Country"
             size="small"
+            :maxlength="MAX_LENGTH"
           />
           <span v-if="errors.country" class="text-xs text-red-500">{{ errors.country }}</span>
         </div>
@@ -166,13 +182,7 @@ const dialogPt = {
           />
         </div>
         <div class="flex gap-2">
-          <Button
-            label="Cancel"
-            text
-            severity="secondary"
-            size="small"
-            @click="visible = false"
-          />
+          <Button label="Cancel" text severity="secondary" size="small" @click="visible = false" />
           <Button
             :label="isEditing ? 'Save' : 'Add'"
             icon="pi pi-check"

@@ -1,14 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { fetchStores, fetchStore, createStore, deleteStore, fetchStatistics } from '@/services/testStoreApi'
-import { testStores } from '@/services/testData'
+import { describe, it, expect } from 'vitest'
+import { fetchStores, fetchStore, createStore, deleteStore, fetchStatistics } from '@/services/test/testStoreApi'
+import { testStores } from '@/services/test/testData'
 
 describe('testStoreApi', () => {
-  // Save original length to detect mutations
-  let originalLength: number
-
-  beforeEach(() => {
-    originalLength = testStores.length
-  })
 
   // #region fetchStores
   describe('fetchStores', () => {

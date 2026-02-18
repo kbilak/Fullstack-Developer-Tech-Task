@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { fetchEntries, fetchEntriesByStore, createEntry, deleteEntry, fetchEntryStatistics } from '@/services/testEntryApi'
-import { testEntries, testStores } from '@/services/testData'
+import { fetchEntries, fetchEntriesByStore, createEntry, deleteEntry, fetchEntryStatistics } from '@/services/test/testEntryApi'
+import { getTestEntries, testStores } from '@/services/test/testData'
 
 describe('testEntryApi', () => {
   // #region fetchEntries
@@ -101,7 +101,7 @@ describe('testEntryApi', () => {
       expect(result.status).toBe(true)
       // fetchEntriesByStore returns { id, entryDate } without idStore,
       // but totalItems should match filtered count
-      const expected = testEntries.filter((e) => e.idStore === storeId).length
+      const expected = getTestEntries().filter((e) => e.idStore === storeId).length
       expect(result.totalItems).toBe(expected)
     })
   })
@@ -110,7 +110,7 @@ describe('testEntryApi', () => {
   // #region createEntry & deleteEntry
   describe('createEntry / deleteEntry', () => {
     it('creates a new entry and allows deletion', async () => {
-      const before = testEntries.length
+      const before = getTestEntries().length
       const storeId = testStores[0]!.id
 
       const createResult = await createEntry({
@@ -118,16 +118,16 @@ describe('testEntryApi', () => {
         entryDate: '2026-03-01T10:00:00',
       })
       expect(createResult.status).toBe(true)
-      expect(testEntries.length).toBe(before + 1)
+      expect(getTestEntries().length).toBe(before + 1)
 
       // Find the new entry (last one)
-      const newEntry = testEntries[testEntries.length - 1]!
+      const newEntry = getTestEntries()[getTestEntries().length - 1]!
       expect(newEntry.idStore).toBe(storeId)
 
       // Delete it
       const deleteResult = await deleteEntry(newEntry.id)
       expect(deleteResult.status).toBe(true)
-      expect(testEntries.length).toBe(before)
+      expect(getTestEntries().length).toBe(before)
     })
   })
   // #endregion createEntry & deleteEntry

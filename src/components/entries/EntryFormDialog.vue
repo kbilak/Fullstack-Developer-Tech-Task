@@ -4,6 +4,7 @@ import { ref, computed, watch } from 'vue'
 import type { EntryListItem } from '@/types/entry'
 import { useUserStore } from '@/stores/useUserStore'
 import type { StoreListItem } from '@/types/store'
+import { dialogPt } from '@/utils/dialog'
 import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
 import Select from 'primevue/select'
@@ -79,6 +80,10 @@ function validate(): boolean {
     error.value = 'Please select a date'
     return false
   }
+  if (entryDate.value > new Date()) {
+    error.value = 'Entry date cannot be in the future'
+    return false
+  }
   return true
 }
 
@@ -107,13 +112,6 @@ async function submit() {
   }
 }
 // #endregion METHODS
-
-const dialogPt = {
-  root: { class: 'rounded-2xl!' },
-  header: { class: 'border-b border-gray-100 px-6! py-4!' },
-  content: { class: 'px-6! py-5!' },
-  footer: { class: 'border-t border-gray-100 px-6! py-4!' },
-}
 </script>
 
 <template>
@@ -125,7 +123,7 @@ const dialogPt = {
     <div class="flex flex-col gap-4">
       <!-- Store: editable (dropdown) when adding, read-only when editing -->
       <div v-if="isEditing" class="flex flex-col gap-1">
-        <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Store</span>
+        <span class="text-xs font-medium tracking-wide text-gray-400 uppercase">Store</span>
         <span class="text-sm text-gray-900">{{ storeName }}</span>
       </div>
       <div v-else class="flex flex-col gap-1.5">

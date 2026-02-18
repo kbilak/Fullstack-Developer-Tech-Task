@@ -1,29 +1,24 @@
 <script setup lang="ts">
 // #region IMPORTS
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useUserStore } from '@/stores/useUserStore'
+import { useEntriesStore } from '@/stores/useEntriesStore'
 import type { EntryDailyCount, EntryStoreCount } from '@/types/entry'
+import { toISODate, fillDailyGaps } from '@/utils/date'
+import { useStatisticsStore } from '@/stores/useStatisticsStore'
+import { fmtNum } from '@/utils/format'
+import { entryColor, CHART_COLORS } from '@/utils/chart'
+import ColorLegend from '@/components/common/ColorLegend.vue'
 import DatePicker from 'primevue/datepicker'
 import Button from 'primevue/button'
 import SelectButton from 'primevue/selectbutton'
 import { Bar, Doughnut } from 'vue-chartjs'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js'
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend)
 // #endregion IMPORTS
 
 // #region STATE
 const userStore = useUserStore()
 const { entryApi } = userStore
+const entriesStore = useEntriesStore()
 const dailyCounts = ref<EntryDailyCount[]>([])
 const storeCounts = ref<EntryStoreCount[]>([])
 const loading = ref(false)
@@ -35,15 +30,20 @@ const viewOptions = [
   { label: 'By Store', value: 'store' },
 ]
 
-function defaultRange(): [Date, Date] {
-  const end = new Date()
-  const start = new Date()
-  start.setDate(start.getDate() - 30)
-  return [start, end]
-}
-
-const dateRange = ref<[Date, Date]>(defaultRange())
+const statsStore = useStatisticsStore()
+const startDate = computed({
+  get: () => new Date(statsStore.startDate + 'T00:00:00'),
+  set: (val: Date) => { statsStore.startDate = toISODate(val) },
+})
+const endDate = computed({
+  get: () => new Date(statsStore.endDate + 'T00:00:00'),
+  set: (val: Date) => { statsStore.endDate = toISODate(val) },
+})
 const loadedRange = ref<[string, string] | null>(null)
+
+const isMobile = ref(window.innerWidth < 640)
+function onResize() { isMobile.value = window.innerWidth < 640 }
+window.addEventListener('resize', onResize)
 // #endregion STATE
 
 // #region COMPUTED
@@ -52,43 +52,18 @@ const totalEntries = computed(() => dailyCounts.value.reduce((sum, d) => sum + d
 const dateRangeChanged = computed(() => {
   if (!loadedRange.value) return true
   return (
-    formatDate(dateRange.value[0]) !== loadedRange.value[0] ||
-    formatDate(dateRange.value[1]) !== loadedRange.value[1]
+    statsStore.startDate !== loadedRange.value[0] ||
+    statsStore.endDate !== loadedRange.value[1]
   )
 })
 
-/** Fills gaps so every day in the range has a data point (0 if missing). */
+/** Fills date gaps so every day in the loaded range has a data point (count defaults to 0), ensuring the bar chart has no missing days. */
 const filledDailyCounts = computed(() => {
   if (dailyCounts.value.length === 0 || !loadedRange.value) return []
-  const map = new Map(dailyCounts.value.map((d) => [d.date.slice(0, 10), d.count]))
-  const result: EntryDailyCount[] = []
-  const current = new Date(loadedRange.value[0] + 'T00:00:00')
-  const end = new Date(loadedRange.value[1] + 'T00:00:00')
-  while (current <= end) {
-    const key = formatDate(current)
-    result.push({ date: key, count: map.get(key) ?? 0 })
-    current.setDate(current.getDate() + 1)
-  }
-  return result
+  return fillDailyGaps(dailyCounts.value, loadedRange.value[0], loadedRange.value[1])
 })
 
-/** Color based on value position in min-max range. */
-function entryColor(count: number, min: number, max: number): string {
-  if (count === 0) return '#9ca3af'
-  if (min === max) return '#059669'
-  const ratio = (count - min) / (max - min)
-  if (ratio <= 0.25) return '#dc2626'
-  if (ratio <= 0.5) return '#d97706'
-  if (ratio <= 0.75) return '#2563eb'
-  return '#059669'
-}
-
-const STORE_COLORS = [
-  '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
-  '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#a855f7',
-  '#84cc16', '#e11d48',
-]
-
+/** Builds bar chart data from filled daily counts, with color intensity mapped to the count range (low = cool, high = warm). */
 const barChartData = computed(() => {
   const data = filledDailyCounts.value
   const counts = data.map((d) => d.count).filter((c) => c > 0)
@@ -133,6 +108,7 @@ const barChartOptions = {
   },
 }
 
+/** Builds a doughnut chart dataset from aggregated per-store entry counts, each store assigned a distinct color. */
 const doughnutChartData = computed(() => {
   const data = storeCounts.value
   return {
@@ -140,7 +116,7 @@ const doughnutChartData = computed(() => {
     datasets: [
       {
         data: data.map((s) => s.count),
-        backgroundColor: data.map((_, i) => STORE_COLORS[i % STORE_COLORS.length]),
+        backgroundColor: data.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
         borderWidth: 2,
         borderColor: '#ffffff',
       },
@@ -148,12 +124,15 @@ const doughnutChartData = computed(() => {
   }
 })
 
-const doughnutChartOptions = {
+const doughnutChartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
     title: { display: false },
-    legend: { position: 'right' as const, labels: { boxWidth: 12, font: { size: 12 }, color: '#374151' } },
+    legend: {
+      position: (isMobile.value ? 'bottom' : 'right') as 'bottom' | 'right',
+      labels: { boxWidth: 12, font: { size: 12 }, color: '#374151' },
+    },
     tooltip: {
       callbacks: {
         label: (ctx: { label: string; parsed: number }) => {
@@ -164,35 +143,31 @@ const doughnutChartOptions = {
       },
     },
   },
-}
+}))
 
 const hasData = computed(() => dailyCounts.value.length > 0 || storeCounts.value.length > 0)
-
-function fmtNum(n: number): string {
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-}
 // #endregion COMPUTED
 
 // #region METHODS
-function formatDate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
+/** Fetches entry statistics for the selected date range and persists results to the Pinia cache. */
 async function loadStatistics() {
-  if (!dateRange.value[0] || !dateRange.value[1]) return
   loading.value = true
   error.value = null
   try {
-    const result = await entryApi().fetchEntryStatistics(
-      formatDate(dateRange.value[0]),
-      formatDate(dateRange.value[1]),
-    )
+    const start = statsStore.startDate
+    const end = statsStore.endDate
+    const result = await entryApi().fetchEntryStatistics(start, end)
     dailyCounts.value = result.dailyCounts
     storeCounts.value = result.storeCounts
-    loadedRange.value = [formatDate(dateRange.value[0]), formatDate(dateRange.value[1])]
+    loadedRange.value = [start, end]
+
+    // Persist to store cache
+    entriesStore.statisticsCache = {
+      dailyCounts: result.dailyCounts,
+      storeCounts: result.storeCounts,
+      loadedRange: loadedRange.value,
+      viewMode: viewMode.value,
+    }
   } catch {
     error.value = 'Failed to load statistics'
     dailyCounts.value = []
@@ -205,21 +180,28 @@ async function loadStatistics() {
 
 // #region LIFECYCLE
 onMounted(() => {
-  loadStatistics()
+  const cached = entriesStore.statisticsCache
+  if (cached) {
+    dailyCounts.value = cached.dailyCounts
+    storeCounts.value = cached.storeCounts
+    loadedRange.value = cached.loadedRange
+    viewMode.value = cached.viewMode
+  } else {
+    loadStatistics()
+  }
 })
 
-watch(() => userStore.storesDataSource, () => {
-  dateRange.value = defaultRange()
-  loadStatistics()
-})
+onUnmounted(() => window.removeEventListener('resize', onResize))
+
+defineExpose({ refresh: loadStatistics })
 // #endregion LIFECYCLE
 </script>
 
 <template>
   <div class="rounded-xl border border-gray-200 bg-white">
     <!-- Header -->
-    <div class="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-      <div class="flex items-center gap-2">
+    <div class="flex flex-col gap-2 border-b border-gray-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-wrap items-center gap-2">
         <i class="pi pi-chart-bar text-sm text-gray-400"></i>
         <span class="text-sm font-semibold text-gray-900">Entry Statistics</span>
         <span
@@ -242,25 +224,25 @@ watch(() => userStore.storesDataSource, () => {
     <!-- Content -->
     <div class="flex flex-col gap-4 px-5 py-4">
       <!-- Date range controls -->
-      <div class="flex items-end gap-3">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div class="flex flex-col gap-1.5">
           <label class="text-[13px] font-medium text-gray-700">From</label>
           <DatePicker
-            v-model="dateRange[0]"
+            v-model="startDate"
             date-format="dd/mm/yy"
-            :max-date="dateRange[1]"
-            class="w-40"
+            :max-date="endDate"
+            class="w-full sm:w-40"
             size="small"
           />
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="text-[13px] font-medium text-gray-700">To</label>
           <DatePicker
-            v-model="dateRange[1]"
+            v-model="endDate"
             date-format="dd/mm/yy"
-            :min-date="dateRange[0]"
+            :min-date="startDate"
             :max-date="new Date()"
-            class="w-40"
+            class="w-full sm:w-40"
             size="small"
           />
         </div>
@@ -301,28 +283,7 @@ watch(() => userStore.storesDataSource, () => {
             <i class="pi pi-spin pi-spinner text-lg text-gray-400"></i>
           </div>
         </div>
-        <div v-if="viewMode === 'daily'" class="mt-2 flex items-center justify-center gap-4 text-[11px] text-gray-500">
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: #dc2626"></span>
-            Low (0–25%)
-          </span>
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: #d97706"></span>
-            Medium (25–50%)
-          </span>
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: #2563eb"></span>
-            High (50–75%)
-          </span>
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: #059669"></span>
-            Top (75–100%)
-          </span>
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" style="background: #9ca3af"></span>
-            No data
-          </span>
-        </div>
+        <ColorLegend v-if="viewMode === 'daily'" class="mt-2" />
       </div>
     </div>
   </div>

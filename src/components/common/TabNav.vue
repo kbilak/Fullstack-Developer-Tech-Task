@@ -1,4 +1,10 @@
 <script setup lang="ts">
+/**
+ * Horizontal tab navigation bar with icon support, optional count badge,
+ * and v-model binding.
+ */
+
+// #region TYPES
 interface Tab {
   id: string
   label: string
@@ -10,12 +16,15 @@ interface Props {
   tabs: Tab[]
   modelValue: string
 }
+// #endregion TYPES
 
+// #region PROPS & EMITS
 defineProps<Props>()
 
 defineEmits<{
   'update:modelValue': [value: string]
 }>()
+// #endregion PROPS & EMITS
 </script>
 
 <template>

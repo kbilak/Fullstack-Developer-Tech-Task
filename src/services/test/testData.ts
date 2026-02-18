@@ -1,4 +1,4 @@
-import type { DailyStatistic } from '@/types/store'
+import type { DailyStatistic } from '@/types/statistics'
 
 /** Simple seeded PRNG for deterministic data. */
 function seededRandom(seed: number): number {
@@ -91,5 +91,9 @@ function generateTestEntries(): { id: number; idStore: number; entryDate: string
   return entries
 }
 
-/** Mutable array of test entries (modified by testEntryApi CRUD operations). */
-export const testEntries = generateTestEntries()
+/** Lazily initialized array of test entries (avoids generating ~200k objects at import time). */
+let _testEntries: ReturnType<typeof generateTestEntries> | null = null
+export function getTestEntries(): { id: number; idStore: number; entryDate: string }[] {
+  if (!_testEntries) _testEntries = generateTestEntries()
+  return _testEntries
+}

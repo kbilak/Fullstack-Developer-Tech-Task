@@ -1,5 +1,6 @@
 import { useApi } from '@/composables/useApi'
-import type { StoreListPaginated, StoreDetail, StorePayload, StoreStatistics } from '@/types/store'
+import type { StoreListPaginated, StoreDetail, StorePayload } from '@/types/store'
+import type { StoreStatistics } from '@/types/statistics'
 import type { ApiResult, CreateResult } from '@/types/api'
 
 const { apiClient } = useApi()

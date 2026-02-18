@@ -1,52 +1,27 @@
 <script setup lang="ts">
 // #region IMPORTS
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/useUserStore'
+import { useEntriesStore } from '@/stores/useEntriesStore'
 import type { EntryDailyCount } from '@/types/entry'
+import { today, daysAgo } from '@/utils/date'
+import { fmtNum, changeText } from '@/utils/format'
+import { makeDualSparkline } from '@/utils/chart'
 import { Line } from 'vue-chartjs'
 import QuickStatDetailDialog from './QuickStatDetailDialog.vue'
 import type { QuickStatMetric } from './QuickStatDetailDialog.vue'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-} from 'chart.js'
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler)
 // #endregion IMPORTS
 
 // #region STATE
 const userStore = useUserStore()
 const { entryApi } = userStore
+const entriesStore = useEntriesStore()
 const dailyCounts = ref<EntryDailyCount[]>([])
 const loading = ref(false)
 
 const showDetail = ref(false)
 const detailMetric = ref<QuickStatMetric>('today')
 // #endregion STATE
-
-// #region HELPERS
-function toLocalDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function today(): string {
-  return toLocalDate(new Date())
-}
-
-function daysAgo(n: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return toLocalDate(d)
-}
-
-function fmtNum(n: number): string {
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-}
-// #endregion HELPERS
 
 // #region COMPUTED
 /** Full 14 days padded: index 0 = 13 days ago, index 13 = today. */
@@ -68,6 +43,7 @@ const previousWeek = computed(() => fullData.value.slice(0, 7))
 const todayCount = computed(() => currentWeek.value[6] ?? 0)
 const yesterdayCount = computed(() => currentWeek.value[5] ?? 0)
 
+/** Percentage change of today's entry count compared to yesterday's. */
 const todayChange = computed(() => {
   if (yesterdayCount.value === 0) return todayCount.value > 0 ? 100 : 0
   return Math.round(((todayCount.value - yesterdayCount.value) / yesterdayCount.value) * 100)
@@ -76,6 +52,7 @@ const todayChange = computed(() => {
 const currentWeekTotal = computed(() => currentWeek.value.reduce((s, v) => s + v, 0))
 const previousWeekTotal = computed(() => previousWeek.value.reduce((s, v) => s + v, 0))
 
+/** Percentage change of this week's total entries compared to the previous week. */
 const weeklyChange = computed(() => {
   if (previousWeekTotal.value === 0) return currentWeekTotal.value > 0 ? 100 : 0
   return Math.round(
@@ -108,33 +85,6 @@ const sparklineOptions = {
   },
 }
 
-function makeDualSparkline(current: number[], previous: number[], color: string) {
-  return {
-    labels: current.map((_, i) => String(i)),
-    datasets: [
-      {
-        data: current,
-        borderColor: color,
-        backgroundColor: color + '18',
-        borderWidth: 1.5,
-        pointRadius: 0,
-        tension: 0.4,
-        fill: true,
-      },
-      {
-        data: previous,
-        borderColor: '#9ca3af',
-        backgroundColor: 'transparent',
-        borderWidth: 1,
-        borderDash: [3, 3],
-        pointRadius: 0,
-        tension: 0.4,
-        fill: false,
-      },
-    ],
-  }
-}
-
 /** Sparkline: current week daily counts + previous week dashed overlay. */
 const todaySparkline = computed(() => {
   const color = todayChange.value >= 0 ? '#10b981' : '#ef4444'
@@ -147,12 +97,13 @@ const avgSparkline = computed(() => {
   return makeDualSparkline(currentWeek.value, previousWeek.value, color)
 })
 
-/** Sparkline: cumulative running total over the current 7 days + previous week overlay. */
+/** Cumulative running total of entries over the current 7-day window. Used for the weekly total sparkline. */
 const cumulativeWeek = computed(() => {
   let sum = 0
   return currentWeek.value.map((v) => (sum += v))
 })
 
+/** Cumulative running total of entries over the previous 7-day window (dashed sparkline overlay). */
 const cumulativePrevWeek = computed(() => {
   let sum = 0
   return previousWeek.value.map((v) => (sum += v))
@@ -162,20 +113,18 @@ const totalSparkline = computed(() => {
   const color = weeklyChange.value >= 0 ? '#10b981' : '#ef4444'
   return makeDualSparkline(cumulativeWeek.value, cumulativePrevWeek.value, color)
 })
-
-function changeText(val: number): string {
-  return (val > 0 ? '+' : '') + val + '%'
-}
 // #endregion COMPUTED
 
 // #region METHODS
+/** Fetches 14-day entry statistics from the API and persists them to the Pinia cache. */
 async function loadStats() {
   loading.value = true
   try {
     const result = await entryApi().fetchEntryStatistics(daysAgo(13), today())
     dailyCounts.value = result.dailyCounts
+    entriesStore.quickStatsCache = { dailyCounts: result.dailyCounts }
   } catch {
-    /* silent — tiles just show 0 */
+    // noop — tiles fall back to 0
   } finally {
     loading.value = false
   }
@@ -189,17 +138,20 @@ function openDetail(metric: QuickStatMetric) {
 
 // #region LIFECYCLE
 onMounted(() => {
-  loadStats()
+  const cached = entriesStore.quickStatsCache
+  if (cached) {
+    dailyCounts.value = cached.dailyCounts
+  } else {
+    loadStats()
+  }
 })
-
-watch(() => userStore.storesDataSource, () => loadStats())
 
 defineExpose({ refresh: loadStats })
 // #endregion LIFECYCLE
 </script>
 
 <template>
-  <div class="grid grid-cols-3 gap-4">
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
     <!-- Today's Entries -->
     <div
       class="cursor-pointer overflow-hidden rounded-xl border border-gray-200 bg-white px-5 py-4 transition-shadow hover:shadow-md"

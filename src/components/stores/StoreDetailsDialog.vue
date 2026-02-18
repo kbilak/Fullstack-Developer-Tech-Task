@@ -20,12 +20,7 @@ defineEmits<{
 }>()
 // #endregion PROPS & EMITS
 
-const dialogPt = {
-  root: { class: 'rounded-2xl!' },
-  header: { class: 'border-b border-gray-100 px-6! py-4!' },
-  content: { class: 'px-6! py-5!' },
-  footer: { class: 'border-t border-gray-100 px-6! py-4!' },
-}
+import { dialogPt } from '@/utils/dialog'
 </script>
 
 <template>

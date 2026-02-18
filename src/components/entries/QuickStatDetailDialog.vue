@@ -3,21 +3,12 @@
 import { ref, computed, watch } from 'vue'
 import { useUserStore } from '@/stores/useUserStore'
 import type { EntryDailyCount } from '@/types/entry'
+import { today, daysAgo, formatShortDate } from '@/utils/date'
+import { fmtNum } from '@/utils/format'
+import { dialogPtNoFooter } from '@/utils/dialog'
 import Dialog from 'primevue/dialog'
 import SelectButton from 'primevue/selectbutton'
 import { Line } from 'vue-chartjs'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend,
-} from 'chart.js'
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 // #endregion IMPORTS
 
 // #region PROPS
@@ -44,47 +35,23 @@ const periodOptions = [
 ]
 // #endregion STATE
 
-// #region HELPERS
-function toLocalDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function todayStr(): string {
-  return toLocalDate(new Date())
-}
-
-function daysAgoStr(n: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return toLocalDate(d)
-}
-
-function formatShortDate(iso: string): string {
-  const d = new Date(iso + 'T00:00:00')
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-}
-
-function fmtNum(n: number): string {
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-}
-// #endregion HELPERS
-
 // #region COMPUTED
 const title = computed(() => {
   switch (props.metric) {
     case 'today': return 'Daily Entry Counts'
     case 'avg': return 'Daily Average Comparison'
     case 'total': return 'Cumulative Weekly Entries'
+    default: return ''
   }
 })
 
-/** Padded array for period*2 days. Index 0 = oldest, last = today. */
+/** Pads daily counts to period*2 days so both current and previous period have complete data for comparison. Index 0 = oldest day, last index = today. */
 const fullData = computed(() => {
   const totalDays = period.value * 2
   const map = new Map(dailyCounts.value.map((d) => [d.date.slice(0, 10), d.count]))
   const result: { date: string; count: number }[] = []
   for (let i = totalDays - 1; i >= 0; i--) {
-    const date = daysAgoStr(i)
+    const date = daysAgo(i)
     result.push({ date, count: map.get(date) ?? 0 })
   }
   return result
@@ -118,6 +85,7 @@ const previousCumulative = computed(() => {
   return previousCounts.value.map((v) => (sum += v))
 })
 
+/** Builds a dual-series line chart: current period (solid) vs previous period (dashed). Uses cumulative running totals when the metric is 'total', raw daily counts otherwise. */
 const chartData = computed(() => {
   const isCumulative = props.metric === 'total'
   const currData = isCumulative ? currentCumulative.value : currentCounts.value
@@ -167,8 +135,8 @@ const chartOptions = computed(() => ({
     },
     tooltip: {
       callbacks: {
-        label: (ctx: { dataset: { label: string }; parsed: { y: number } }) =>
-          ` ${ctx.dataset.label}: ${fmtNum(ctx.parsed.y)}`,
+        label: (ctx: { dataset: { label?: string }; parsed: { y: number | null } }) =>
+          ` ${ctx.dataset.label ?? ''}: ${fmtNum(ctx.parsed.y ?? 0)}`,
       },
     },
   },
@@ -187,11 +155,12 @@ const chartOptions = computed(() => ({
 // #endregion COMPUTED
 
 // #region METHODS
+/** Fetches entry statistics spanning period*2 days so both current and previous periods are covered. */
 async function loadData() {
   loading.value = true
   try {
     const totalDays = period.value * 2
-    const result = await entryApi().fetchEntryStatistics(daysAgoStr(totalDays - 1), todayStr())
+    const result = await entryApi().fetchEntryStatistics(daysAgo(totalDays - 1), today())
     dailyCounts.value = result.dailyCounts
   } catch {
     dailyCounts.value = []
@@ -210,18 +179,10 @@ watch(period, () => {
   if (visible.value) loadData()
 })
 // #endregion WATCHERS
-
-// #region PASSTHROUGH
-const dialogPt = {
-  root: { class: 'rounded-2xl!' },
-  header: { class: 'border-b border-gray-100 px-6! py-4!' },
-  content: { class: 'px-6! py-5!' },
-}
-// #endregion PASSTHROUGH
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" modal :style="{ width: '640px' }" :pt="dialogPt">
+  <Dialog v-model:visible="visible" modal :style="{ width: '640px' }" :pt="dialogPtNoFooter">
     <template #header>
       <div class="flex w-full items-center justify-between pr-2">
         <span class="text-base font-semibold text-gray-900">{{ title }}</span>

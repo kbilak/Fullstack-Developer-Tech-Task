@@ -2,27 +2,44 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useUserStore } from './useUserStore'
 import type { StoreListItem, StoreDetail } from '@/types/store'
+import type { EntryDailyCount } from '@/types/entry'
+import type { DailyStatistic } from '@/types/statistics'
 
-/**
- * @method useStoresStore
- * @summary Store managing stores list with server-side sort, search, and page caching
- */
+export interface StoreQuickStatsCache {
+  totalStoreCount: number
+  allDailyCounts: EntryDailyCount[]
+  topStore: { id: number; name: string; entryCount: number } | null
+  topStoreDailyCounts: DailyStatistic[]
+}
+
+/** Store managing stores list with server-side sort, search, and page caching. */
 export const useStoresStore = defineStore('stores', () => {
   const userStore = useUserStore()
 
   // #region STATE
-  const stores = ref<StoreListItem[]>([]) // Current page of stores
-  const totalRecords = ref(0) // Total store count from API (after search filter)
-  const page = ref(1) // Current page number
-  const pageSize = ref(10) // Items per page
-  const sortField = computed({ get: () => userStore.storesSortField, set: (v) => { userStore.storesSortField = v } })
-  const sortOrder = computed({ get: () => userStore.storesSortOrder, set: (v) => { userStore.storesSortOrder = v } })
-  const search = ref('') // Search query sent to API
-  const loading = ref(false) // Loading indicator
-  const error = ref<string | null>(null) // Last error message
+  const stores = ref<StoreListItem[]>([])
+  const totalRecords = ref(0)
+  const page = ref(1)
+  const pageSize = ref(10)
+  const sortField = computed({
+    get: () => userStore.storesSortField,
+    set: (v) => {
+      userStore.storesSortField = v
+    },
+  })
+  const sortOrder = computed({
+    get: () => userStore.storesSortOrder,
+    set: (v) => {
+      userStore.storesSortOrder = v
+    },
+  })
+  const search = ref('')
+  const loading = ref(false)
+  const error = ref<string | null>(null)
 
-  const pageCache = new Map<string, { items: StoreListItem[]; totalItems: number }>() // Cached pages keyed by all query params
-  const detailCache = new Map<number, StoreDetail>() // Cached store details keyed by store ID
+  const pageCache = new Map<string, { items: StoreListItem[]; totalItems: number }>()
+  const detailCache = new Map<number, StoreDetail>()
+  const quickStatsCache = ref<StoreQuickStatsCache | null>(null)
   // #endregion STATE
 
   // #region HELPERS
@@ -53,7 +70,9 @@ export const useStoresStore = defineStore('stores', () => {
     error.value = null
     try {
       const searchTrimmed = search.value.trim() || undefined
-      const result = await userStore.storeApi().fetchStores(page.value, pageSize.value, sortParam(), searchTrimmed)
+      const result = await userStore
+        .storeApi()
+        .fetchStores(page.value, pageSize.value, sortParam(), searchTrimmed)
       stores.value = result.items
       totalRecords.value = result.totalItems
       pageCache.set(key, { items: result.items, totalItems: result.totalItems })
@@ -75,8 +94,10 @@ export const useStoresStore = defineStore('stores', () => {
   /** Optimistically removes stores from the list and adjusts totalRecords. */
   function removeStoresLocally(ids: number[]) {
     const idSet = new Set(ids)
+    const before = stores.value.length
     stores.value = stores.value.filter((s) => !idSet.has(s.id))
-    totalRecords.value = Math.max(0, totalRecords.value - ids.length)
+    const removed = before - stores.value.length
+    totalRecords.value = Math.max(0, totalRecords.value - removed)
     pageCache.clear()
     ids.forEach((id) => detailCache.delete(id))
   }
@@ -96,14 +117,12 @@ export const useStoresStore = defineStore('stores', () => {
     pageCache.clear()
   }
 
-  /** Clears all caches and force-reloads stores from the API. */
-  function invalidateAndReload() {
+  async function invalidateAndReload() {
     pageCache.clear()
     detailCache.clear()
-    loadStores(true)
+    await loadStores(true)
   }
 
-  /** Resets all state and caches to initial values. */
   function $reset() {
     stores.value = []
     totalRecords.value = 0
@@ -114,12 +133,27 @@ export const useStoresStore = defineStore('stores', () => {
     error.value = null
     pageCache.clear()
     detailCache.clear()
+    quickStatsCache.value = null
   }
   // #endregion METHODS
 
   return {
-    stores, totalRecords, page, pageSize, sortField, sortOrder, search, loading, error,
-    loadStores, getStoreDetail, removeStoresLocally, updateStoreLocally,
-    incrementEntryCount, invalidateAndReload, $reset,
+    stores,
+    totalRecords,
+    page,
+    pageSize,
+    sortField,
+    sortOrder,
+    search,
+    loading,
+    error,
+    quickStatsCache,
+    loadStores,
+    getStoreDetail,
+    removeStoresLocally,
+    updateStoreLocally,
+    incrementEntryCount,
+    invalidateAndReload,
+    $reset,
   }
 })

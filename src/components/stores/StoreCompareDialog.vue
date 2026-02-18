@@ -2,24 +2,14 @@
 // #region IMPORTS
 import { ref, watch, computed } from 'vue'
 import { useUserStore } from '@/stores/useUserStore'
-import type { DailyStatistic, StoreStatistics } from '@/types/store'
+import type { StoreStatistics } from '@/types/statistics'
+import { toISODate, defaultDateRange, fillDailyGaps } from '@/utils/date'
+import { CHART_COLORS } from '@/utils/chart'
+import { dialogPtNoFooter } from '@/utils/dialog'
 import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
 import Button from 'primevue/button'
 import { Line, Bar } from 'vue-chartjs'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js'
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend)
 // #endregion IMPORTS
 
 // #region PROPS & EMITS
@@ -36,53 +26,27 @@ const storeResults = ref<StoreStatistics[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-function defaultRange(): [Date, Date] {
-  const end = new Date()
-  const start = new Date()
-  start.setDate(start.getDate() - 30)
-  return [start, end]
-}
-
-const dateRange = ref<[Date, Date]>(defaultRange())
+const dateRange = ref<[Date, Date]>(defaultDateRange())
 const loadedRange = ref<[string, string] | null>(null)
 const chartType = ref<'line' | 'bar'>('line')
 // #endregion STATE
 
-// #region HELPERS
-function formatDate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-/** Fills gaps so every day in the range has a data point (0 if missing). */
-function fillGaps(stats: DailyStatistic[], range: [string, string]): DailyStatistic[] {
-  const map = new Map(stats.map((s) => [s.date, s.count]))
-  const result: DailyStatistic[] = []
-  const current = new Date(range[0])
-  const end = new Date(range[1])
-  while (current <= end) {
-    const key = current.toISOString().split('T')[0]!
-    result.push({ date: key, count: map.get(key) ?? 0 })
-    current.setDate(current.getDate() + 1)
-  }
-  return result
-}
-// #endregion HELPERS
-
 // #region COMPUTED
-const COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899']
-
+/**
+ * Builds multi-series chart data from all selected stores' daily statistics.
+ * Each store becomes a separate dataset with a distinct color. Days missing
+ * from the API response are gap-filled with zero so every series shares
+ * the same continuous label axis.
+ */
 const chartData = computed(() => {
   if (!loadedRange.value || storeResults.value.length === 0) return { labels: [], datasets: [] }
 
   const range = loadedRange.value
-  const labels = fillGaps([], range).map((s) => s.date)
+  const labels = fillDailyGaps([], range[0], range[1]).map((s) => s.date)
 
   const datasets = storeResults.value.map((store, i) => {
-    const filled = fillGaps(store.statistics, range)
-    const color = COLORS[i % COLORS.length]!
+    const filled = fillDailyGaps(store.statistics, range[0], range[1])
+    const color = CHART_COLORS[i % CHART_COLORS.length]!
     return {
       label: store.name,
       data: filled.map((s) => s.count),
@@ -105,8 +69,8 @@ const chartOptions = {
     legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, font: { size: 11 } } },
     tooltip: {
       callbacks: {
-        label: (ctx: { dataset: { label: string }; parsed: { y: number | null } }) =>
-          `${ctx.dataset.label}: ${ctx.parsed.y ?? 0} entries`,
+        label: (ctx: { dataset: { label?: string }; parsed: { y: number | null } }) =>
+          `${ctx.dataset.label ?? ''}: ${ctx.parsed.y ?? 0} entries`,
       },
     },
   },
@@ -116,23 +80,29 @@ const chartOptions = {
   },
 }
 
+/** Sums all entry counts across every loaded store within the current date range. */
 const totalEntries = computed(() =>
   storeResults.value.reduce((sum, s) => sum + s.statistics.reduce((a, d) => a + d.count, 0), 0),
 )
 
+/** True when the date-picker values differ from the last fetched range, enabling the Load button. */
 const dateRangeChanged = computed(() => {
   if (!loadedRange.value) return true
-  return formatDate(dateRange.value[0]) !== loadedRange.value[0] || formatDate(dateRange.value[1]) !== loadedRange.value[1]
+  return toISODate(dateRange.value[0]) !== loadedRange.value[0] || toISODate(dateRange.value[1]) !== loadedRange.value[1]
 })
 // #endregion COMPUTED
 
 // #region METHODS
+/**
+ * Fetches daily statistics for every selected store in parallel via Promise.all,
+ * then stores the results and records the loaded date range for cache comparison.
+ */
 async function loadAll() {
   if (props.stores.length === 0 || !dateRange.value[0] || !dateRange.value[1]) return
   loading.value = true
   error.value = null
-  const start = formatDate(dateRange.value[0])
-  const end = formatDate(dateRange.value[1])
+  const start = toISODate(dateRange.value[0])
+  const end = toISODate(dateRange.value[1])
   try {
     const results = await Promise.all(
       props.stores.map((s) => storeApi().fetchStatistics(s.id, start, end)),
@@ -151,7 +121,7 @@ async function loadAll() {
 // #region WATCHERS
 watch(visible, (open) => {
   if (open) {
-    dateRange.value = defaultRange()
+    dateRange.value = defaultDateRange()
     loadAll()
   } else {
     storeResults.value = []
@@ -161,15 +131,10 @@ watch(visible, (open) => {
 })
 // #endregion WATCHERS
 
-const dialogPt = {
-  root: { class: 'rounded-2xl!' },
-  header: { class: 'border-b border-gray-100 px-6! py-4!' },
-  content: { class: 'px-6! py-5!' },
-}
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" modal :style="{ width: '820px' }" :pt="dialogPt">
+  <Dialog v-model:visible="visible" modal :style="{ width: '820px' }" :pt="dialogPtNoFooter">
     <template #header>
       <div class="flex flex-col gap-1">
         <div class="flex items-center gap-2">

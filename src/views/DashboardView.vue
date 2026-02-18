@@ -19,6 +19,10 @@ const entriesStore = useEntriesStore()
 const userStore = useUserStore()
 
 const validTabs = ['stores', 'entries']
+/**
+ * Writable computed that syncs the active tab with the URL query parameter `?tab=stores|entries`.
+ * Defaults to 'stores' when the query value is missing or invalid.
+ */
 const activeTab = computed({
   get: () => {
     const tab = route.query.tab as string
@@ -41,6 +45,7 @@ const tabs = [
 // #endregion STATE
 
 // #region WATCHERS
+/** Resets both stores and entries Pinia stores when the user switches data source (API <-> test data). */
 watch(() => userStore.storesDataSource, () => {
   storesStore.$reset()
   storesStore.loadStores()
@@ -59,7 +64,7 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen bg-white">
-    <header class="flex items-center justify-between border-b border-gray-200 px-8 py-5">
+    <header class="flex items-center justify-between border-b border-gray-200 px-4 py-5 sm:px-8">
       <div>
         <h1 class="text-xl font-semibold tracking-tight text-gray-900">Store Analytics</h1>
         <p class="mt-1 text-sm text-gray-500">Visitor statistics across all locations</p>
@@ -74,7 +79,7 @@ onUnmounted(() => {
       />
     </header>
 
-    <main class="mx-auto max-w-5xl px-8 py-8">
+    <main class="mx-auto max-w-5xl px-4 py-8 sm:px-8">
       <TabNav v-model="activeTab" :tabs="tabs" />
 
       <div class="pt-4">

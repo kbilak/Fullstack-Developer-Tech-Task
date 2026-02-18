@@ -1,5 +1,3 @@
-import { config } from '@vue/test-utils'
-
 // Silence Vue warn about <i> being a built-in HTML element
 const originalWarn = console.warn
 console.warn = (...args: unknown[]) => {

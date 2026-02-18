@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useStoresStore } from '@/stores/useStoresStore'
 import { useUserStore } from '@/stores/useUserStore'
-import type { StoreListItem } from '@/types/store'
+
 
 describe('useStoresStore', () => {
   beforeEach(() => {
@@ -112,8 +112,8 @@ describe('useStoresStore', () => {
 
       // List unchanged — id doesn't exist in loaded page
       expect(store.stores.length).toBe(beforeLength)
-      // totalRecords still decremented (optimistic)
-      expect(store.totalRecords).toBe(beforeTotal - 1)
+      // totalRecords unchanged — only actually removed items are decremented
+      expect(store.totalRecords).toBe(beforeTotal)
     })
   })
   // #endregion removeStoresLocally

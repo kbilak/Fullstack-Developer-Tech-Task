@@ -2,6 +2,7 @@
 // #region IMPORTS
 import { ref, watch } from 'vue'
 import { useUserStore } from '@/stores/useUserStore'
+import { dialogPt } from '@/utils/dialog'
 import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
 import Button from 'primevue/button'
@@ -37,8 +38,16 @@ watch(visible, (open) => {
 // #endregion WATCHERS
 
 // #region METHODS
+/**
+ * Validates that a storeId is present, creates a new entry via the API for the
+ * selected date, then closes the dialog and emits 'added' so the parent can refresh.
+ */
 async function submit() {
   if (!props.storeId) return
+  if (entryDate.value > new Date()) {
+    error.value = 'Entry date cannot be in the future'
+    return
+  }
   submitting.value = true
   error.value = null
   try {
@@ -55,13 +64,6 @@ async function submit() {
   }
 }
 // #endregion METHODS
-
-const dialogPt = {
-  root: { class: 'rounded-2xl!' },
-  header: { class: 'border-b border-gray-100 px-6! py-4!' },
-  content: { class: 'px-6! py-5!' },
-  footer: { class: 'border-t border-gray-100 px-6! py-4!' },
-}
 </script>
 
 <template>
@@ -72,7 +74,7 @@ const dialogPt = {
 
     <div class="flex flex-col gap-4">
       <div class="flex flex-col gap-1">
-        <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Store</span>
+        <span class="text-xs font-medium tracking-wide text-gray-400 uppercase">Store</span>
         <span class="text-sm text-gray-900">{{ storeName }}</span>
       </div>
       <div class="flex flex-col gap-1.5">

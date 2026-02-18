@@ -1,6 +1,12 @@
-import type { EntryListPaginated, StoreEntryListPaginated, NewEntry, UpdateEntry, EntryStatistics } from '@/types/entry'
+import type {
+  EntryListPaginated,
+  StoreEntryListPaginated,
+  NewEntry,
+  UpdateEntry,
+  EntryStatistics,
+} from '@/types/entry'
 import type { ApiResult } from '@/types/api'
-import { testEntries, testStores, testStatistics } from './testData'
+import { getTestEntries, testStores, testStatistics } from './testData'
 
 /** Fetches a paginated list of test entries with optional sorting, search, and filters. */
 export async function fetchEntries(
@@ -12,20 +18,15 @@ export async function fetchEntries(
   dateFrom?: string,
   dateTo?: string,
 ): Promise<EntryListPaginated> {
-  let items = [...testEntries]
+  let items = [...getTestEntries()]
 
   // Filter by store
-  if (storeId) {
-    items = items.filter((e) => e.idStore === storeId)
-  }
+  if (storeId) items = items.filter((e) => e.idStore === storeId)
 
   // Filter by date range
-  if (dateFrom) {
-    items = items.filter((e) => e.entryDate.slice(0, 10) >= dateFrom)
-  }
-  if (dateTo) {
-    items = items.filter((e) => e.entryDate.slice(0, 10) <= dateTo)
-  }
+  if (dateFrom) items = items.filter((e) => e.entryDate.slice(0, 10) >= dateFrom)
+
+  if (dateTo) items = items.filter((e) => e.entryDate.slice(0, 10) <= dateTo)
 
   // Search by store name
   if (search) {
@@ -83,9 +84,10 @@ export async function fetchEntries(
 export async function fetchEntriesByStore(
   storeId: number,
   page = 1,
-  pageSize = 1,
+  pageSize = 10,
 ): Promise<StoreEntryListPaginated> {
-  const storeEntries = testEntries.filter((e) => e.idStore === storeId)
+  const entries = getTestEntries()
+  const storeEntries = entries.filter((e) => e.idStore === storeId)
   const totalItems = storeEntries.length
   const start = (page - 1) * pageSize
   const paged = storeEntries.slice(start, start + pageSize)
@@ -103,31 +105,42 @@ export async function fetchEntriesByStore(
 
 /** Creates a new test entry. */
 export async function createEntry(payload: NewEntry): Promise<ApiResult> {
+  const entries = getTestEntries()
   let maxId = 0
-  for (const e of testEntries) { if (e.id > maxId) maxId = e.id }
-  testEntries.push({ id: maxId + 1, idStore: payload.idStore, entryDate: payload.entryDate })
+  for (const e of entries) {
+    if (e.id > maxId) maxId = e.id
+  }
+  entries.push({ id: maxId + 1, idStore: payload.idStore, entryDate: payload.entryDate })
   return { status: true, message: null }
 }
 
 /** Updates a test entry by ID. */
 export async function updateEntry(id: number, payload: UpdateEntry): Promise<ApiResult> {
-  const entry = testEntries.find((e) => e.id === id)
+  const entry = getTestEntries().find((e) => e.id === id)
   if (entry) entry.entryDate = payload.entryDate
   return { status: true, message: null }
 }
 
-/** Deletes a single test entry by ID. */
+/** Deletes a single test entry by ID. Returns error if entry does not exist. */
 export async function deleteEntry(id: number): Promise<ApiResult> {
-  const idx = testEntries.findIndex((e) => e.id === id)
-  if (idx !== -1) testEntries.splice(idx, 1)
+  const entries = getTestEntries()
+  const idx = entries.findIndex((e) => e.id === id)
+  if (idx === -1) return { status: false, message: `Entry with ID ${id} not found` }
+  entries.splice(idx, 1)
   return { status: true, message: null }
 }
 
-/** Deletes multiple test entries by IDs. */
+/** Deletes multiple test entries by IDs. Returns error if any entry does not exist. */
 export async function deleteEntries(ids: number[]): Promise<ApiResult> {
+  const entries = getTestEntries()
+  const existingIds = new Set(entries.map((e) => e.id))
+  const missing = ids.filter((id) => !existingIds.has(id))
+  if (missing.length > 0) {
+    return { status: false, message: `Entries not found: ${missing.join(', ')}` }
+  }
   const idSet = new Set(ids)
-  for (let i = testEntries.length - 1; i >= 0; i--) {
-    if (idSet.has(testEntries[i]!.id)) testEntries.splice(i, 1)
+  for (let i = entries.length - 1; i >= 0; i--) {
+    if (idSet.has(entries[i]!.id)) entries.splice(i, 1)
   }
   return { status: true, message: null }
 }
