@@ -28,3 +28,12 @@ export interface StorePayload {
   city: string
   country: string
 }
+
+export interface DailyStatistic {
+  date: string
+  count: number
+}
+
+export interface StoreStatistics extends Store, ApiResult {
+  statistics: DailyStatistic[]
+}

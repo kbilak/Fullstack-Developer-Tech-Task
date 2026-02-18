@@ -2,7 +2,7 @@
 // #region IMPORTS
 import { ref, computed, watch } from 'vue'
 import type { StoreDetail, StorePayload } from '@/types/store'
-import { createStore, updateStore } from '@/services/api/storeApi'
+import { useUserStore } from '@/stores/useUserStore'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
@@ -24,6 +24,7 @@ const emit = defineEmits<{
 // #endregion PROPS & EMITS
 
 // #region STATE
+const { storeApi } = useUserStore()
 const formData = ref<StorePayload>({ name: '', city: '', country: '' })
 const errors = ref<Record<string, string>>({})
 const submitting = ref(false)
@@ -73,11 +74,11 @@ async function submit() {
   submitting.value = true
   try {
     if (isEditing.value && props.store) {
-      await updateStore(props.store.id, formData.value)
+      await storeApi().updateStore(props.store.id, formData.value)
       visible.value = false
       emit('updated', { id: props.store.id, name: formData.value.name })
     } else {
-      await createStore(formData.value)
+      await storeApi().createStore(formData.value)
       visible.value = false
       emit('created')
     }

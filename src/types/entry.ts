@@ -4,6 +4,7 @@ export interface EntryListItem {
   id: number
   idStore: number
   entryDate: string
+  storeName: string
 }
 
 export interface StoreEntryItem {
@@ -30,4 +31,24 @@ export interface StoreEntryListPaginated extends ApiResult {
 export interface NewEntry {
   idStore: number
   entryDate: string
+}
+
+export interface UpdateEntry {
+  entryDate: string
+}
+
+export interface EntryDailyCount {
+  date: string
+  count: number
+}
+
+export interface EntryStoreCount {
+  idStore: number
+  storeName: string | null
+  count: number
+}
+
+export interface EntryStatistics extends ApiResult {
+  dailyCounts: EntryDailyCount[]
+  storeCounts: EntryStoreCount[]
 }

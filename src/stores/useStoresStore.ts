@@ -1,6 +1,6 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import { fetchStores, fetchStore } from '@/services/api/storeApi'
+import { useUserStore } from './useUserStore'
 import type { StoreListItem, StoreDetail } from '@/types/store'
 
 /**
@@ -8,13 +8,15 @@ import type { StoreListItem, StoreDetail } from '@/types/store'
  * @summary Store managing stores list with server-side sort, search, and page caching
  */
 export const useStoresStore = defineStore('stores', () => {
+  const userStore = useUserStore()
+
   // #region STATE
   const stores = ref<StoreListItem[]>([]) // Current page of stores
   const totalRecords = ref(0) // Total store count from API (after search filter)
   const page = ref(1) // Current page number
   const pageSize = ref(10) // Items per page
-  const sortField = ref<'id' | 'name'>('id') // Sort column sent to API
-  const sortOrder = ref<'asc' | 'desc'>('asc') // Sort direction sent to API
+  const sortField = computed({ get: () => userStore.storesSortField, set: (v) => { userStore.storesSortField = v } })
+  const sortOrder = computed({ get: () => userStore.storesSortOrder, set: (v) => { userStore.storesSortOrder = v } })
   const search = ref('') // Search query sent to API
   const loading = ref(false) // Loading indicator
   const error = ref<string | null>(null) // Last error message
@@ -51,7 +53,7 @@ export const useStoresStore = defineStore('stores', () => {
     error.value = null
     try {
       const searchTrimmed = search.value.trim() || undefined
-      const result = await fetchStores(page.value, pageSize.value, sortParam(), searchTrimmed)
+      const result = await userStore.storeApi().fetchStores(page.value, pageSize.value, sortParam(), searchTrimmed)
       stores.value = result.items
       totalRecords.value = result.totalItems
       pageCache.set(key, { items: result.items, totalItems: result.totalItems })
@@ -65,7 +67,7 @@ export const useStoresStore = defineStore('stores', () => {
   /** Returns store detail from cache or fetches from API. */
   async function getStoreDetail(id: number): Promise<StoreDetail> {
     if (detailCache.has(id)) return detailCache.get(id)!
-    const detail = await fetchStore(id)
+    const detail = await userStore.storeApi().fetchStore(id)
     detailCache.set(id, detail)
     return detail
   }
@@ -107,8 +109,6 @@ export const useStoresStore = defineStore('stores', () => {
     totalRecords.value = 0
     page.value = 1
     pageSize.value = 10
-    sortField.value = 'id'
-    sortOrder.value = 'asc'
     search.value = ''
     loading.value = false
     error.value = null

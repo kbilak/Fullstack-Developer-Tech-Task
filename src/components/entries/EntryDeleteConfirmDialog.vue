@@ -10,7 +10,7 @@ import Button from 'primevue/button'
 const visible = defineModel<boolean>('visible', { required: true })
 
 const props = defineProps<{
-  storeIds: number[]
+  entryId: number | null
 }>()
 
 const emit = defineEmits<{
@@ -19,20 +19,16 @@ const emit = defineEmits<{
 // #endregion PROPS & EMITS
 
 // #region STATE
-const { storeApi } = useUserStore()
+const { entryApi } = useUserStore()
 const loading = ref(false)
 // #endregion STATE
 
 // #region METHODS
-/**
- * @method handleDelete
- * @summary Sends a bulk delete request for selected stores and closes dialog on success
- */
 async function handleDelete() {
-  if (props.storeIds.length === 0) return
+  if (!props.entryId) return
   loading.value = true
   try {
-    await storeApi().deleteStores(props.storeIds)
+    await entryApi().deleteEntry(props.entryId)
     visible.value = false
     emit('deleted')
   } catch {
@@ -54,7 +50,7 @@ const dialogPt = {
 <template>
   <Dialog v-model:visible="visible" modal :style="{ width: '400px' }" :pt="dialogPt">
     <template #header>
-      <span class="text-base font-semibold text-gray-900">Delete stores</span>
+      <span class="text-base font-semibold text-gray-900">Delete entry</span>
     </template>
 
     <div class="flex flex-col items-center gap-3 py-2 text-center">
@@ -62,8 +58,7 @@ const dialogPt = {
         <i class="pi pi-exclamation-triangle text-xl"></i>
       </div>
       <p class="text-sm text-gray-700">
-        Delete <strong>{{ storeIds.length }}</strong> selected
-        {{ storeIds.length === 1 ? 'store' : 'stores' }}? This can't be undone.
+        Delete entry <strong>#{{ entryId }}</strong>? This can't be undone.
       </p>
     </div>
 
@@ -78,7 +73,7 @@ const dialogPt = {
           @click="visible = false"
         />
         <Button
-          label="Delete all"
+          label="Delete"
           severity="danger"
           size="small"
           :loading="loading"

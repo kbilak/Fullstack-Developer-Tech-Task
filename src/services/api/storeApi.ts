@@ -1,5 +1,5 @@
 import { useApi } from '@/composables/useApi'
-import type { StoreListPaginated, StoreDetail, StorePayload } from '@/types/store'
+import type { StoreListPaginated, StoreDetail, StorePayload, StoreStatistics } from '@/types/store'
 import type { ApiResult, CreateResult } from '@/types/api'
 
 const { apiClient } = useApi()
@@ -44,5 +44,17 @@ export async function deleteStore(id: number): Promise<ApiResult> {
 /** Deletes multiple stores by their IDs. */
 export async function deleteStores(ids: number[]): Promise<ApiResult> {
   const { data } = await apiClient.delete<ApiResult>('/Store/bulk', { data: ids })
+  return data
+}
+
+/** Fetches daily visit statistics for a store within a date range. */
+export async function fetchStatistics(
+  storeId: number,
+  startDate: string,
+  endDate: string,
+): Promise<StoreStatistics> {
+  const { data } = await apiClient.get<StoreStatistics>(`/Store/statistics/${storeId}`, {
+    params: { startDate, endDate },
+  })
   return data
 }

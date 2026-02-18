@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // #region IMPORTS
 import { ref, watch } from 'vue'
-import { createEntry } from '@/services/api/entryApi'
+import { useUserStore } from '@/stores/useUserStore'
 import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
 import Button from 'primevue/button'
@@ -21,6 +21,7 @@ const emit = defineEmits<{
 // #endregion PROPS & EMITS
 
 // #region STATE
+const { entryApi } = useUserStore()
 const entryDate = ref<Date>(new Date())
 const submitting = ref(false)
 const error = ref<string | null>(null)
@@ -41,7 +42,7 @@ async function submit() {
   submitting.value = true
   error.value = null
   try {
-    await createEntry({
+    await entryApi().createEntry({
       idStore: props.storeId,
       entryDate: entryDate.value.toISOString(),
     })

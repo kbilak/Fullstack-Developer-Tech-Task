@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // #region IMPORTS
 import { ref } from 'vue'
-import { deleteStore } from '@/services/api/storeApi'
+import { useUserStore } from '@/stores/useUserStore'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 // #endregion IMPORTS
@@ -20,6 +20,7 @@ const emit = defineEmits<{
 // #endregion PROPS & EMITS
 
 // #region STATE
+const { storeApi } = useUserStore()
 const loading = ref(false)
 // #endregion STATE
 
@@ -32,7 +33,7 @@ async function handleDelete() {
   if (!props.storeId) return
   loading.value = true
   try {
-    await deleteStore(props.storeId)
+    await storeApi().deleteStore(props.storeId)
     visible.value = false
     emit('deleted')
   } catch {
